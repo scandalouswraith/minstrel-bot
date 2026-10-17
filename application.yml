@@ -1,6 +1,6 @@
 
 server:
-  port: ${PORT:2333}
+  port: 2333
   address: 0.0.0.0
 
 lavalink:
@@ -16,17 +16,21 @@ lavalink:
   plugins:
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
       snapshot: false
-    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
-      repository: "https://maven.lavalink.dev/releases"
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.1"
       snapshot: false
     - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
       snapshot: false
 
 plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+
   lavasrc:
     providers:
-      - "ytsearch:\"%ISRC%\""
-      - "ytmsearch:%QUERY%"
+      - 'ytsearch:"%ISRC%"'
       - "ytsearch:%QUERY%"
     sources:
       spotify: true
@@ -44,3 +48,5 @@ plugins:
     sources:
       - spotify
       - youtube
+      - deezer
+
