@@ -1,0 +1,46 @@
+
+server:
+  port: ${PORT:2333}
+  address: 0.0.0.0
+
+lavalink:
+  server:
+    password: "${LAVALINK_SERVER_PASSWORD}"
+    sources:
+      youtube: false
+      soundcloud: true
+      bandcamp: true
+      http: true
+      local: false
+
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
+      snapshot: false
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
+      repository: "https://maven.lavalink.dev/releases"
+      snapshot: false
+    - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
+      snapshot: false
+
+plugins:
+  lavasrc:
+    providers:
+      - "ytsearch:\"%ISRC%\""
+      - "ytmsearch:%QUERY%"
+      - "ytsearch:%QUERY%"
+    sources:
+      spotify: true
+      youtube: false
+    lyrics-sources:
+      spotify: true
+      youtube: true
+      lrcLib: true
+    spotify:
+      countryCode: "US"
+      playlistLoadLimit: 3
+      albumLoadLimit: 2
+
+  lavalyrics:
+    sources:
+      - spotify
+      - youtube
