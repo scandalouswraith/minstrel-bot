@@ -312,12 +312,22 @@ client.on("interactionCreate", async interaction => {
 
       await player.connect();
 
-      const query = interaction.options.getString("query", true);
-      const result = await player.search(
-        { query },
-        interaction.user
-      );
+const query = interaction.options.getString("query", true);
 
+const isSoundCloudSearch = query
+  .toLowerCase()
+  .startsWith("scsearch:");
+
+const searchQuery = isSoundCloudSearch
+  ? query.slice("scsearch:".length).trim()
+  : query;
+
+const result = await player.search(
+  isSoundCloudSearch
+    ? { query: searchQuery, source: "soundcloud" }
+    : { query: searchQuery },
+  interaction.user
+);
       const tracks = result?.tracks || [];
 
       if (!tracks.length) {
