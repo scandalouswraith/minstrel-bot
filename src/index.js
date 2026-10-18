@@ -328,11 +328,19 @@ const result = await player.search(
     : { query: searchQuery },
   interaction.user
 );
-      const tracks = result?.tracks || [];
-      console.log("🎵 Search load type:", result?.loadType);
-      console.log("🎵 Playlist info:", result?.playlist);
-      console.log("🎵 Tracks returned:", tracks.length);
+      
+const tracks = result?.tracks || [];
 
+console.log("🎵 Search load type:", result?.loadType);
+console.log("🎵 Playlist info:", result?.playlist);
+console.log("🎵 Tracks returned:", tracks.length);
+
+if (result?.loadType === "error") {
+  console.error(
+    "❌ Lavalink search error:",
+    JSON.stringify(result.exception ?? result, null, 2)
+  );
+}   
       if (!tracks.length) {
         return interaction.editReply(
           "I couldn't find any playable tracks for that request."
