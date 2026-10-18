@@ -329,6 +329,9 @@ const result = await player.search(
   interaction.user
 );
       const tracks = result?.tracks || [];
+      console.log("🎵 Search load type:", result?.loadType);
+      console.log("🎵 Playlist info:", result?.playlist);
+      console.log("🎵 Tracks returned:", tracks.length);
 
       if (!tracks.length) {
         return interaction.editReply(
