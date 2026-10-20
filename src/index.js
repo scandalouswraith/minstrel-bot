@@ -436,55 +436,59 @@ if (!player.playing && !player.paused) {
 
 return interaction.editReply(
   `🎶 Added **${tracks[0].info.title}** to the queue!`
-);
+  );
+}
+
+    const currentPlayer = client.lavalink.players.get(interaction.guildId);
 
 
-    const player = client.lavalink.players.get(interaction.guildId);
+if (commandName === "queue") {
+  if (!currentPlayer) {
+    return interaction.reply("The tavern is quiet—nothing is playing.");
+  }
 
-    if (commandName === "queue") {
-      if (!player) {
-        return interaction.reply("The tavern is quiet—nothing is playing.");
-      }
+  const current = currentPlayer.queue.current;
+  const upcoming = currentPlayer.queue.tracks.slice(0, 10);
 
-      const current = player.queue.current;
-      const upcoming = player.queue.tracks.slice(0, 10);
+  const list = upcoming.map((track, index) =>
+    `${index + 1}. ${track.info.title}`
+  );
 
-      const list = upcoming.map((track, index) =>
-        `${index + 1}. ${track.info.title}`
-      );
+  return interaction.reply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xB49A57)
+        .setTitle("🍺 Tavern Queue")
+        .setDescription(
+          `**Now:** ${current?.info?.title || "Nothing"}\n\n` +
+          (list.join("\n") || "No upcoming tracks.")
+        ),
+    ],
+  });
+}
 
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xB49A57)
-            .setTitle("🍺 Tavern Queue")
-            .setDescription(
-              `**Now:** ${current?.info?.title || "Nothing"}\n\n` +
-              (list.join("\n") || "No upcoming tracks.")
-            ),
-        ],
-      });
-    }
 
-    if (commandName === "nowplaying") {
-      const current = player?.queue.current;
+    
+if (commandName === "nowplaying") {
+  const current = currentPlayer?.queue.current;
 
-      return interaction.reply(
-        current
-          ? `🎵 Now playing: **${current.info.title}**`
-          : "Nothing is playing right now."
-      );
-    }
+  return interaction.reply(
+    current
+      ? `🎵 Now playing: **${current.info.title}**`
+      : "Nothing is playing right now."
+  );
+}
+
 
     if (commandName === "lyrics") {
-      if (!player?.queue.current) {
+      if (!currentPlayer?.queue.current) {
         return interaction.reply("There's no song playing right now.");
       }
 
       const state = lyricsDisplays.get(interaction.guildId);
 
       if (state?.lines?.length) {
-        await updateLyricsDisplay(player, state);
+        await updateLyricsDisplay(currentPlayer, state);
         return interaction.reply({
           content: "I've refreshed the rolling lyrics display! 🎶",
           ephemeral: true,
@@ -497,7 +501,7 @@ return interaction.editReply(
       });
     }
 
-    if (!player) {
+    if (!currentPlayer) {
       return interaction.reply({
         content: "Nothing is playing right now.",
         ephemeral: true,
@@ -505,24 +509,24 @@ return interaction.editReply(
     }
 
     if (commandName === "skip") {
-      await player.skip();
+      await currentPlayer.skip();
       return interaction.reply("⏭️ Skipping to the next song!");
     }
 
     if (commandName === "pause") {
-      await player.pause();
+      await currentPlayer.pause();
       return interaction.reply("⏸️ Music paused.");
     }
 
     if (commandName === "resume") {
-      await player.resume();
+      await currentPlayer.resume();
       return interaction.reply("▶️ Music resumed!");
     }
 
     if (commandName === "stop") {
-      await player.unsubscribeLyrics().catch(() => {});
-      await player.stopPlaying(true);
-      await player.destroy();
+      await currentPlayer.unsubscribeLyrics().catch(() => {});
+      await currentPlayer.stopPlaying(true);
+      await currentPlayer.destroy();
       lyricsDisplays.delete(interaction.guildId);
       return interaction.reply("🍻 Music stopped and the queue cleared.");
     }
