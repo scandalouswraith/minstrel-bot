@@ -325,7 +325,7 @@ client.on("interactionCreate", async interaction => {
           voiceChannelId: voiceChannel.id,
           textChannelId: interaction.channelId,
           selfDeaf: true,
-          volume: 100,
+          volume: 80,
         });
       } else if (player.voiceChannelId !== voiceChannel.id) {
         return interaction.editReply(
