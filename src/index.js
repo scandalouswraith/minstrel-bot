@@ -10,6 +10,29 @@ const {
 } = require("discord.js");
 
 const { LavalinkManager } = require("lavalink-client");
+const spotifyUrlInfo = require("spotify-url-info");
+const fetch = require("isomorphic-unfetch");
+
+async function getSpotifyPlaylistTracks(url) {
+  const { getTracks } = spotifyUrlInfo(fetch);
+  const tracks = await getTracks(url);
+
+  return tracks.map(track => {
+    const artists = Array.isArray(track.artists)
+      ? track.artists
+          .map(artist =>
+            typeof artist === "string" ? artist : artist.name
+          )
+          .filter(Boolean)
+          .join(", ")
+      : track.artist || "";
+
+    return {
+      title: track.name || track.title || "",
+      artist: artists,
+    };
+  }).filter(track => track.title);
+}
 
 const requiredEnv = [
   "DISCORD_TOKEN",
@@ -312,57 +335,109 @@ client.on("interactionCreate", async interaction => {
 
       await player.connect();
 
+
 const query = interaction.options.getString("query", true);
+const isSpotifyPlaylist =
+  /open\.spotify\.com\/playlist\//i.test(query);
 
-const isSoundCloudSearch = query
-  .toLowerCase()
-  .startsWith("scsearch:");
+if (isSpotifyPlaylist) {
+  let playlistTracks;
 
-const searchQuery = isSoundCloudSearch
-  ? query.slice("scsearch:".length).trim()
-  : query;
+  try {
+    playlistTracks = await getSpotifyPlaylistTracks(query);
+  } catch (error) {
+    console.error("Spotify playlist retrieval failed:", error);
+    return interaction.editReply(
+      "I couldn't retrieve that Spotify playlist. Please check that the playlist is accessible."
+    );
+  }
+
+  if (!playlistTracks.length) {
+    return interaction.editReply(
+      "I couldn't find any songs in that Spotify playlist."
+    );
+  }
+
+  const matchedTracks = [];
+
+  await interaction.editReply(
+    `🎶 Found **${playlistTracks.length} songs**. Searching YouTube for matches now...`
+  );
+
+  for (const song of playlistTracks) {
+    try {
+      const search = await player.search(
+        {
+          query: `${song.title} ${song.artist}`.trim(),
+          source: "youtube",
+        },
+        interaction.user
+      );
+
+      const match = search?.tracks?.[0];
+
+      if (match) {
+        matchedTracks.push(match);
+      } else {
+        console.log(`Skipped unmatched song: ${song.title}`);
+      }
+    } catch (error) {
+      console.error(`Could not match ${song.title}:`, error.message);
+    }
+  }
+
+  if (!matchedTracks.length) {
+    return interaction.editReply(
+      "I retrieved the playlist, but couldn't find playable YouTube matches."
+    );
+  }
+
+  await player.queue.add(matchedTracks);
+
+  if (!player.playing && !player.paused) {
+    await player.play();
+  }
+
+  return interaction.editReply(
+    `🎶 Added **${matchedTracks.length} of ${playlistTracks.length} songs** to the queue in playlist order!`
+  );
+}
 
 const result = await player.search(
-  isSoundCloudSearch
-    ? { query: searchQuery, source: "soundcloud" }
-    : { query: searchQuery },
+  query.startsWith("scsearch:")
+    ? {
+        query: query.slice("scsearch:".length).trim(),
+        source: "soundcloud",
+      }
+    : { query },
   interaction.user
 );
-      
-const tracks = result?.tracks || [];
 
-console.log("🎵 Search load type:", result?.loadType);
-console.log("🎵 Playlist info:", result?.playlist);
-console.log("🎵 Tracks returned:", tracks.length);
+const tracks = result?.tracks || [];
 
 if (result?.loadType === "error") {
   console.error(
-    "❌ Lavalink search error:",
+    "Lavalink search error:",
     JSON.stringify(result.exception ?? result, null, 2)
   );
-}   
-      if (!tracks.length) {
-        return interaction.editReply(
-          "I couldn't find any playable tracks for that request."
-        );
-      }
+}
 
-      // Playlist URLs usually return multiple tracks; single searches use the first.
-      const isPlaylist = Boolean(result.playlist);
-      const selectedTracks = isPlaylist ? tracks : [tracks[0]];
+if (!tracks.length) {
+  return interaction.editReply(
+    "I couldn't find any playable tracks for that request."
+  );
+}
 
-      await player.queue.add(selectedTracks);
+await player.queue.add([tracks[0]]);
 
-      if (!player.playing && !player.paused) {
-        await player.play();
-      }
+if (!player.playing && !player.paused) {
+  await player.play();
+}
 
-      return interaction.editReply(
-        isPlaylist
-          ? `🎶 Added **${selectedTracks.length} tracks** from the playlist to the queue!`
-          : `🎶 Added **${tracks[0].info.title}** to the queue!`
-      );
-    }
+return interaction.editReply(
+  `🎶 Added **${tracks[0].info.title}** to the queue!`
+);
+
 
     const player = client.lavalink.players.get(interaction.guildId);
 
