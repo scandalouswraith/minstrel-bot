@@ -179,35 +179,58 @@ function lyricText(lines, index) {
   ].join("\n\n").slice(0, 4000);
 }
 
+
 async function updateLyricsDisplay(player, state) {
   const channel = getLyricsChannel(player);
   if (!channel || !state.lines.length) return;
 
-  const index = Math.max(
-    0,
-    Math.min(state.index, state.lines.length - 1)
-  );
+  // Prevent simultaneous events from creating duplicate messages.
+  if (state.updatingLyrics) {
+    state.pendingLyricsUpdate = true;
+    return;
+  }
 
-  const embed = new EmbedBuilder()
-    .setColor(0xB49A57)
-    .setTitle(`🎵 ${state.title || "Now Playing"}`)
-    .setDescription(lyricText(state.lines, index))
-    .setFooter({ text: "Hearthside Tavern • Minstrel" });
+  state.updatingLyrics = true;
 
   try {
-    if (state.messageId) {
-      const message = await channel.messages.fetch(state.messageId);
-      await message.edit({ embeds: [embed] });
-    } else {
-      const message = await channel.send({ embeds: [embed] });
-      state.messageId = message.id;
-    }
+    do {
+      state.pendingLyricsUpdate = false;
+
+      const index = Math.max(
+        0,
+        Math.min(state.index, state.lines.length - 1)
+      );
+
+      const embed = new EmbedBuilder()
+        .setColor(0xB49A57)
+        .setTitle(`🎵 ${state.title || "Now Playing"}`)
+        .setDescription(lyricText(state.lines, index))
+        .setFooter({ text: "Hearthside Tavern • Minstrel" });
+
+      if (state.messageId) {
+        try {
+          const message = await channel.messages.fetch(state.messageId);
+          await message.edit({ embeds: [embed] });
+        } catch (error) {
+          if (error.code !== 10008) throw error;
+
+          // The old message was deleted; create a replacement.
+          state.messageId = null;
+        }
+      }
+
+      if (!state.messageId) {
+        const message = await channel.send({ embeds: [embed] });
+        state.messageId = message.id;
+      }
+    } while (state.pendingLyricsUpdate);
   } catch (error) {
-    // A deleted message can be recreated on the next lyrics event.
-    if (error.code === 10008) state.messageId = null;
-    else console.error("Lyrics display error:", error.message);
+    console.error("Lyrics display error:", error.message);
+  } finally {
+    state.updatingLyrics = false;
   }
 }
+
 
 client.lavalink.on("trackStart", async (player, track) => {
   const channel = getLyricsChannel(player);
@@ -342,7 +365,7 @@ client.on("interactionCreate", async interaction => {
       }
 
       await player.connect();
-
+      await player.setVolume(25);
 
 const query = interaction.options.getString("query", true);
 const isSpotifyPlaylist =
