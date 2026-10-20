@@ -119,7 +119,7 @@ client.lavalink = new LavalinkManager({
 
   client: {
     id: process.env.DISCORD_CLIENT_ID,
-    username: "Whiskers & Ale Minstrel",
+    username: "Hearthside Tavern",
   },
 
   playerOptions: {
@@ -192,7 +192,7 @@ async function updateLyricsDisplay(player, state) {
     .setColor(0xB49A57)
     .setTitle(`🎵 ${state.title || "Now Playing"}`)
     .setDescription(lyricText(state.lines, index))
-    .setFooter({ text: "Whiskers & Ale • Minstrel" });
+    .setFooter({ text: "Hearthside Tavern • Minstrel" });
 
   try {
     if (state.messageId) {
@@ -219,7 +219,7 @@ client.lavalink.on("trackStart", async (player, track) => {
       .setDescription(
         `**[${track.info.title}](${track.info.uri || "https://discord.com"})**`
       )
-      .setFooter({ text: "Whiskers & Ale Minstrel" });
+      .setFooter({ text: "Hearthside Tavern Minstrel" });
 
     await channel.send({ embeds: [embed] }).catch(console.error);
   }
@@ -239,6 +239,7 @@ client.lavalink.on("trackStart", async (player, track) => {
   }
 });
 
+
 client.lavalink.on("LyricsFound", async (player, track, payload) => {
   const lyrics = payload?.lyrics || payload;
   const lines = Array.isArray(lyrics?.lines)
@@ -249,9 +250,15 @@ client.lavalink.on("LyricsFound", async (player, track, payload) => {
 
   const state = lyricsDisplays.get(player.guildId) || {
     messageId: null,
+    lines: [],
     index: 0,
     title: track?.info?.title || "Now Playing",
   };
+
+  // Ignore duplicate LyricsFound events for the same track.
+  if (state.lines.length && state.title === (track?.info?.title || state.title)) {
+    return;
+  }
 
   state.lines = lines;
   state.index = 0;
@@ -260,6 +267,7 @@ client.lavalink.on("LyricsFound", async (player, track, payload) => {
 
   await updateLyricsDisplay(player, state);
 });
+
 
 client.lavalink.on("LyricsLine", async (player, track, payload) => {
   const state = lyricsDisplays.get(player.guildId);
@@ -325,7 +333,7 @@ client.on("interactionCreate", async interaction => {
           voiceChannelId: voiceChannel.id,
           textChannelId: interaction.channelId,
           selfDeaf: true,
-          volume: 80,
+          volume: 30,
         });
       } else if (player.voiceChannelId !== voiceChannel.id) {
         return interaction.editReply(
