@@ -364,27 +364,42 @@ if (isSpotifyPlaylist) {
     `🎶 Found **${playlistTracks.length} songs**. Searching YouTube for matches now...`
   );
 
-  for (const song of playlistTracks) {
-    try {
-      const search = await player.search(
+
+for (const song of playlistTracks) {
+  try {
+    let search = await player.search(
+      {
+        query: `${song.title} ${song.artist} official audio`,
+        source: "youtube",
+      },
+      interaction.user
+    );
+
+    let match = search?.tracks?.[0];
+
+    // Fall back to a normal search if no official-audio result appears.
+    if (!match) {
+      search = await player.search(
         {
-          query: `${song.title} ${song.artist}`.trim(),
+          query: `${song.title} ${song.artist}`,
           source: "youtube",
         },
         interaction.user
       );
 
-      const match = search?.tracks?.[0];
-
-      if (match) {
-        matchedTracks.push(match);
-      } else {
-        console.log(`Skipped unmatched song: ${song.title}`);
-      }
-    } catch (error) {
-      console.error(`Could not match ${song.title}:`, error.message);
+      match = search?.tracks?.[0];
     }
+
+    if (match) {
+      matchedTracks.push(match);
+    } else {
+      console.log(`Skipped unmatched song: ${song.title}`);
+    }
+  } catch (error) {
+    console.error(`Could not match ${song.title}:`, error.message);
   }
+}
+
 
   if (!matchedTracks.length) {
     return interaction.editReply(
