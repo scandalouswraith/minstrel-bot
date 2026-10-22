@@ -125,7 +125,7 @@ client.lavalink = new LavalinkManager({
   playerOptions: {
     defaultSearchPlatform: "ytsearch",
     onDisconnect: {
-      autoReconnect: true,
+      autoReconnect: false,
       destroyPlayer: false,
     },
     onEmptyQueue: {
