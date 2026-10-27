@@ -265,6 +265,21 @@ client.lavalink.on("trackStart", async (player, track) => {
 
 client.lavalink.on("LyricsFound", async (player, track, payload) => {
   const lyrics = payload?.lyrics || payload;
+  
+  console.log("[LyricsFound diagnostic]", {
+  track: track?.info?.title,
+  payloadKeys: payload && typeof payload === "object"
+    ? Object.keys(payload)
+    : [],
+  lyricsKeys: lyrics && typeof lyrics === "object"
+    ? Object.keys(lyrics)
+    : [],
+  hasLinesArray: Array.isArray(lyrics?.lines),
+  lineCount: Array.isArray(lyrics?.lines)
+    ? lyrics.lines.length
+    : 0,
+});
+  
   const lines = Array.isArray(lyrics?.lines)
     ? lyrics.lines.filter(item => item && typeof item.line === "string")
     : [];
