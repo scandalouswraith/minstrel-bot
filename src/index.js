@@ -471,20 +471,10 @@ if (!player.playing && !player.paused) {
 return interaction.editReply(
   `🎶 Added **${matchedTracks.length} of ${playlistTracks.length} songs** to the queue in shuffled order!`
 );
+}
 
+// Regular single-song search
 const result = await player.search(
-  query.startsWith("scsearch:")
-    ? {
-        query: query.slice("scsearch:".length).trim(),
-        source: "soundcloud",
-      }
-    : {
-        query: query.startsWith("ytsearch:")
-          ? query
-          : `ytsearch:${query}`,
-      },
-  interaction.user
-);
 
 const tracks = result?.tracks || [];
 
