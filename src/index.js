@@ -473,8 +473,21 @@ return interaction.editReply(
 );
 }
 
+      
 // Regular single-song search
 const result = await player.search(
+  query.startsWith("scsearch:")
+    ? {
+        query: query.slice("scsearch:".length).trim(),
+        source: "soundcloud",
+      }
+    : {
+        query: query.startsWith("ytsearch:")
+          ? query
+          : `ytsearch:${query}`,
+      },
+  interaction.user
+);
 
 const tracks = result?.tracks || [];
 
@@ -499,10 +512,10 @@ if (!player.playing && !player.paused) {
 
 return interaction.editReply(
   `🎶 Added **${tracks[0].info.title}** to the queue!`
-  );
-}
+);
 
-    const currentPlayer = client.lavalink.players.get(interaction.guildId);
+  
+  const currentPlayer = client.lavalink.players.get(interaction.guildId);
 
 
 if (commandName === "queue") {
