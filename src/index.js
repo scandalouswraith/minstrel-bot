@@ -478,7 +478,11 @@ const result = await player.search(
         query: query.slice("scsearch:".length).trim(),
         source: "soundcloud",
       }
-    : { query },
+    : {
+        query: query.startsWith("ytsearch:")
+          ? query
+          : `ytsearch:${query}`,
+      },
   interaction.user
 );
 
