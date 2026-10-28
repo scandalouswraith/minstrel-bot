@@ -453,16 +453,24 @@ for (const song of playlistTracks) {
     );
   }
 
-  await player.queue.add(matchedTracks);
-
-  if (!player.playing && !player.paused) {
-    await player.play();
-  }
-
-  return interaction.editReply(
-    `🎶 Added **${matchedTracks.length} of ${playlistTracks.length} songs** to the queue in playlist order!`
-  );
+// Automatically shuffle the matched playlist tracks.
+for (let i = matchedTracks.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [matchedTracks[i], matchedTracks[j]] = [
+    matchedTracks[j],
+    matchedTracks[i],
+  ];
 }
+
+await player.queue.add(matchedTracks);
+
+if (!player.playing && !player.paused) {
+  await player.play();
+}
+
+return interaction.editReply(
+  `🎶 Added **${matchedTracks.length} of ${playlistTracks.length} songs** to the queue in shuffled order!`
+);
 
 const result = await player.search(
   query.startsWith("scsearch:")
