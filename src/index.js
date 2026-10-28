@@ -513,7 +513,7 @@ if (!player.playing && !player.paused) {
 return interaction.editReply(
   `🎶 Added **${tracks[0].info.title}** to the queue!`
 );
-
+}
   
   const currentPlayer = client.lavalink.players.get(interaction.guildId);
 
