@@ -158,8 +158,12 @@ client.once("ready", async () => {
       { body: commands }
     );
 
-console.log("Slash commands registered.");
-console.log("Lavalink will initialize when music is requested.");
+    console.log("Slash commands registered.");
+
+    // Initialize Lavalink when the Discord bot starts.
+    await client.lavalink.init(client.user);
+
+    console.log("Lavalink initialized.");
   } catch (error) {
     console.error("Startup error:", error);
   }
