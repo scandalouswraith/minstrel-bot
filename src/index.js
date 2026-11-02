@@ -101,6 +101,9 @@ const rest = new REST({ version: "10" })
 // One rolling lyrics message per server.
 const lyricsDisplays = new Map();
 
+// Lavalink is initialized only when music is requested.
+let lavalinkInitialized = false;
+
 client.lavalink = new LavalinkManager({
   nodes: [
     {
@@ -155,9 +158,8 @@ client.once("ready", async () => {
       { body: commands }
     );
 
-    console.log("Slash commands registered.");
-    await client.lavalink.init(client.user);
-    console.log("Lavalink manager initialized.");
+console.log("Slash commands registered.");
+console.log("Lavalink will initialize when music is requested.");
   } catch (error) {
     console.error("Startup error:", error);
   }
@@ -345,6 +347,20 @@ client.lavalink.on("trackEnd", async player => {
   }
 });
 
+// When the last player is destroyed, disconnect Lavalink.
+// This gives Railway a chance to scale the Lavalink service to zero.
+client.lavalink.on("playerDestroy", async () => {
+  try {
+    if (client.lavalink.players.size === 0) {
+      await client.lavalink.nodeManager.disconnectAll(false, false);
+
+      console.log("No music players remain. Lavalink disconnected for idle time.");
+    }
+  } catch (error) {
+    console.error("Could not disconnect idle Lavalink:", error.message);
+  }
+});
+
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -361,9 +377,21 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
-      await interaction.deferReply();
+    await interaction.deferReply();
 
-      let player = client.lavalink.players.get(interaction.guildId);
+// Connect Lavalink only when someone requests music.
+if (!lavalinkInitialized) {
+  await client.lavalink.init(client.user);
+  lavalinkInitialized = true;
+
+  console.log("Lavalink initialized for music playback.");
+} else {
+  await client.lavalink.nodeManager.reconnectAll();
+
+  console.log("Lavalink nodes reconnected for music playback.");
+}
+
+let player = client.lavalink.players.get(interaction.guildId);
 
       if (!player) {
         player = await client.lavalink.createPlayer({
