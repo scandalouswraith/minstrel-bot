@@ -101,10 +101,8 @@ const rest = new REST({ version: "10" })
 // One rolling lyrics message per server.
 const lyricsDisplays = new Map();
 
-// Lavalink initializes on the first play request and can disconnect when idle.
+// Lavalink is initialized only when music is requested.
 let lavalinkInitialized = false;
-let lavalinkConnectPromise = null;
-let lavalinkIdleDisconnecting = false;
 
 client.lavalink = new LavalinkManager({
   nodes: [
@@ -161,7 +159,11 @@ client.once("ready", async () => {
     );
 
     console.log("Slash commands registered.");
-    console.log("Lavalink will initialize when music is requested.");
+
+    // Initialize Lavalink when the Discord bot starts.
+    await client.lavalink.init(client.user);
+
+    console.log("Lavalink initialized.");
   } catch (error) {
     console.error("Startup error:", error);
   }
@@ -182,6 +184,7 @@ function lyricText(lines, index) {
     `*${next || " "}*`,
   ].join("\n\n").slice(0, 4000);
 }
+
 
 async function updateLyricsDisplay(player, state) {
   const channel = getLyricsChannel(player);
@@ -268,21 +271,21 @@ client.lavalink.on("trackStart", async (player, track) => {
 
 client.lavalink.on("LyricsFound", async (player, track, payload) => {
   const lyrics = payload?.lyrics || payload;
-
+  
   console.log("[LyricsFound diagnostic]", {
-    track: track?.info?.title,
-    payloadKeys: payload && typeof payload === "object"
-      ? Object.keys(payload)
-      : [],
-    lyricsKeys: lyrics && typeof lyrics === "object"
-      ? Object.keys(lyrics)
-      : [],
-    hasLinesArray: Array.isArray(lyrics?.lines),
-    lineCount: Array.isArray(lyrics?.lines)
-      ? lyrics.lines.length
-      : 0,
-  });
-
+  track: track?.info?.title,
+  payloadKeys: payload && typeof payload === "object"
+    ? Object.keys(payload)
+    : [],
+  lyricsKeys: lyrics && typeof lyrics === "object"
+    ? Object.keys(lyrics)
+    : [],
+  hasLinesArray: Array.isArray(lyrics?.lines),
+  lineCount: Array.isArray(lyrics?.lines)
+    ? lyrics.lines.length
+    : 0,
+});
+  
   const lines = Array.isArray(lyrics?.lines)
     ? lyrics.lines.filter(item => item && typeof item.line === "string")
     : [];
@@ -348,24 +351,14 @@ client.lavalink.on("trackEnd", async player => {
   }
 });
 
-// Disconnect Lavalink after the last player is destroyed.
-// Keep the node registered so it can be connected again later.
+// When the last player is destroyed, disconnect Lavalink.
+// This gives Railway a chance to scale the Lavalink service to zero.
 client.lavalink.on("playerDestroy", async () => {
   try {
-    // Let any simultaneous player creation finish before checking the count.
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    if (client.lavalink.players.size !== 0 || lavalinkIdleDisconnecting) {
-      return;
-    }
-
-    lavalinkIdleDisconnecting = true;
-
-    try {
+    if (client.lavalink.players.size === 0) {
       await client.lavalink.nodeManager.disconnectAll(false, false);
+
       console.log("No music players remain. Lavalink disconnected for idle time.");
-    } finally {
-      lavalinkIdleDisconnecting = false;
     }
   } catch (error) {
     console.error("Could not disconnect idle Lavalink:", error.message);
@@ -388,33 +381,21 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
-      await interaction.deferReply();
+    await interaction.deferReply();
 
-      // Initialize Lavalink on the first play request.
-      // Later, connect nodes that are disconnected without force-reconnecting.
-      if (!lavalinkInitialized) {
-        if (!lavalinkConnectPromise) {
-          lavalinkConnectPromise = client.lavalink.init(client.user);
-        }
+// Connect Lavalink only when someone requests music.
+if (!lavalinkInitialized) {
+  await client.lavalink.init(client.user);
+  lavalinkInitialized = true;
 
-        try {
-          await lavalinkConnectPromise;
-          lavalinkInitialized = true;
-          console.log("Lavalink initialized for music playback.");
-        } finally {
-          lavalinkConnectPromise = null;
-        }
-      } else {
-        // Wait for an idle disconnect already in progress to finish.
-        while (lavalinkIdleDisconnecting) {
-          await new Promise(resolve => setTimeout(resolve, 250));
-        }
+  console.log("Lavalink initialized for music playback.");
+} else {
+  await client.lavalink.nodeManager.reconnectAll();
 
-        await client.lavalink.nodeManager.connectAll();
-        console.log("Disconnected Lavalink nodes connected for playback.");
-      }
+  console.log("Lavalink nodes reconnected for music playback.");
+}
 
-      let player = client.lavalink.players.get(interaction.guildId);
+let player = client.lavalink.players.get(interaction.guildId);
 
       if (!player) {
         player = await client.lavalink.createPlayer({
@@ -433,171 +414,179 @@ client.on("interactionCreate", async interaction => {
       await player.connect();
       await player.setVolume(25);
 
-      const query = interaction.options.getString("query", true);
-      const isSpotifyPlaylist =
-        /open\.spotify\.com\/playlist\//i.test(query);
-           if (isSpotifyPlaylist) {
-        let playlistTracks;
+const query = interaction.options.getString("query", true);
+const isSpotifyPlaylist =
+  /open\.spotify\.com\/playlist\//i.test(query);
 
-        try {
-          playlistTracks = await getSpotifyPlaylistTracks(query);
-        } catch (error) {
-          console.error("Spotify playlist retrieval failed:", error);
-          return interaction.editReply(
-            "I couldn't retrieve that Spotify playlist. Please check that the playlist is accessible."
-          );
-        }
+if (isSpotifyPlaylist) {
+  let playlistTracks;
 
-        if (!playlistTracks.length) {
-          return interaction.editReply(
-            "I couldn't find any songs in that Spotify playlist."
-          );
-        }
+  try {
+    playlistTracks = await getSpotifyPlaylistTracks(query);
+  } catch (error) {
+    console.error("Spotify playlist retrieval failed:", error);
+    return interaction.editReply(
+      "I couldn't retrieve that Spotify playlist. Please check that the playlist is accessible."
+    );
+  }
 
-        const matchedTracks = [];
+  if (!playlistTracks.length) {
+    return interaction.editReply(
+      "I couldn't find any songs in that Spotify playlist."
+    );
+  }
 
-        await interaction.editReply(
-          `🎶 Found **${playlistTracks.length} songs**. Searching YouTube for matches now...`
-        );
+  const matchedTracks = [];
 
-        for (const song of playlistTracks) {
-          try {
-            let search = await player.search(
-              {
-                query: `${song.title} ${song.artist} official audio`,
-                source: "youtube",
-              },
-              interaction.user
-            );
+  await interaction.editReply(
+    `🎶 Found **${playlistTracks.length} songs**. Searching YouTube for matches now...`
+  );
 
-            let match = search?.tracks?.[0];
 
-            // Fall back to a normal search if no official-audio result appears.
-            if (!match) {
-              search = await player.search(
-                {
-                  query: `${song.title} ${song.artist}`,
-                  source: "youtube",
-                },
-                interaction.user
-              );
+for (const song of playlistTracks) {
+  try {
+    let search = await player.search(
+      {
+        query: `${song.title} ${song.artist} official audio`,
+        source: "youtube",
+      },
+      interaction.user
+    );
 
-              match = search?.tracks?.[0];
-            }
+    let match = search?.tracks?.[0];
 
-            if (match) {
-              matchedTracks.push(match);
-            } else {
-              console.log(`Skipped unmatched song: ${song.title}`);
-            }
-          } catch (error) {
-            console.error(`Could not match ${song.title}:`, error.message);
-          }
-        }
-
-        if (!matchedTracks.length) {
-          return interaction.editReply(
-            "I retrieved the playlist, but couldn't find playable YouTube matches."
-          );
-        }
-
-        // Automatically shuffle the matched playlist tracks.
-        for (let i = matchedTracks.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [matchedTracks[i], matchedTracks[j]] = [
-            matchedTracks[j],
-            matchedTracks[i],
-          ];
-        }
-
-        await player.queue.add(matchedTracks);
-
-        if (!player.playing && !player.paused) {
-          await player.play();
-        }
-
-        return interaction.editReply(
-          `🎶 Added **${matchedTracks.length} of ${playlistTracks.length} songs** to the queue in shuffled order!`
-        );
-      }
-
-      // Regular single-song search
-      const result = await player.search(
-        query.startsWith("scsearch:")
-          ? {
-              query: query.slice("scsearch:".length).trim(),
-              source: "soundcloud",
-            }
-          : {
-              query: query.startsWith("ytsearch:")
-                ? query
-                : `ytsearch:${query}`,
-            },
+    // Fall back to a normal search if no official-audio result appears.
+    if (!match) {
+      search = await player.search(
+        {
+          query: `${song.title} ${song.artist}`,
+          source: "youtube",
+        },
         interaction.user
       );
 
-      const tracks = result?.tracks || [];
-
-      if (result?.loadType === "error") {
-        console.error(
-          "Lavalink search error:",
-          JSON.stringify(result.exception ?? result, null, 2)
-        );
-      }
-
-      if (!tracks.length) {
-        return interaction.editReply(
-          "I couldn't find any playable tracks for that request."
-        );
-      }
-
-      await player.queue.add([tracks[0]]);
-
-      if (!player.playing && !player.paused) {
-        await player.play();
-      }
-
-      return interaction.editReply(
-        `🎶 Added **${tracks[0].info.title}** to the queue!`
-      );
+      match = search?.tracks?.[0];
     }
 
-    const currentPlayer = client.lavalink.players.get(interaction.guildId);
+    if (match) {
+      matchedTracks.push(match);
+    } else {
+      console.log(`Skipped unmatched song: ${song.title}`);
+    }
+  } catch (error) {
+    console.error(`Could not match ${song.title}:`, error.message);
+  }
+}
 
-    if (commandName === "queue") {
-      if (!currentPlayer) {
-        return interaction.reply("The tavern is quiet—nothing is playing.");
+
+  if (!matchedTracks.length) {
+    return interaction.editReply(
+      "I retrieved the playlist, but couldn't find playable YouTube matches."
+    );
+  }
+
+// Automatically shuffle the matched playlist tracks.
+for (let i = matchedTracks.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [matchedTracks[i], matchedTracks[j]] = [
+    matchedTracks[j],
+    matchedTracks[i],
+  ];
+}
+
+await player.queue.add(matchedTracks);
+
+if (!player.playing && !player.paused) {
+  await player.play();
+}
+
+return interaction.editReply(
+  `🎶 Added **${matchedTracks.length} of ${playlistTracks.length} songs** to the queue in shuffled order!`
+);
+}
+
+      
+// Regular single-song search
+const result = await player.search(
+  query.startsWith("scsearch:")
+    ? {
+        query: query.slice("scsearch:".length).trim(),
+        source: "soundcloud",
       }
+    : {
+        query: query.startsWith("ytsearch:")
+          ? query
+          : `ytsearch:${query}`,
+      },
+  interaction.user
+);
 
-      const current = currentPlayer.queue.current;
-      const upcoming = currentPlayer.queue.tracks.slice(0, 10);
+const tracks = result?.tracks || [];
 
-      const list = upcoming.map((track, index) =>
-        `${index + 1}. ${track.info.title}`
-      );
+if (result?.loadType === "error") {
+  console.error(
+    "Lavalink search error:",
+    JSON.stringify(result.exception ?? result, null, 2)
+  );
+}
 
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xB49A57)
-            .setTitle("🍺 Tavern Queue")
-            .setDescription(
-              `**Now:** ${current?.info?.title || "Nothing"}\n\n` +
-              (list.join("\n") || "No upcoming tracks.")
-            ),
-        ],
-      });
-    }
+if (!tracks.length) {
+  return interaction.editReply(
+    "I couldn't find any playable tracks for that request."
+  );
+}
 
-    if (commandName === "nowplaying") {
-      const current = currentPlayer?.queue.current;
+await player.queue.add([tracks[0]]);
 
-      return interaction.reply(
-        current
-          ? `🎵 Now playing: **${current.info.title}**`
-          : "Nothing is playing right now."
-      );
-    }
+if (!player.playing && !player.paused) {
+  await player.play();
+}
+
+return interaction.editReply(
+  `🎶 Added **${tracks[0].info.title}** to the queue!`
+);
+}
+  
+  const currentPlayer = client.lavalink.players.get(interaction.guildId);
+
+
+if (commandName === "queue") {
+  if (!currentPlayer) {
+    return interaction.reply("The tavern is quiet—nothing is playing.");
+  }
+
+  const current = currentPlayer.queue.current;
+  const upcoming = currentPlayer.queue.tracks.slice(0, 10);
+
+  const list = upcoming.map((track, index) =>
+    `${index + 1}. ${track.info.title}`
+  );
+
+  return interaction.reply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xB49A57)
+        .setTitle("🍺 Tavern Queue")
+        .setDescription(
+          `**Now:** ${current?.info?.title || "Nothing"}\n\n` +
+          (list.join("\n") || "No upcoming tracks.")
+        ),
+    ],
+  });
+}
+
+
+    
+if (commandName === "nowplaying") {
+  const current = currentPlayer?.queue.current;
+
+  return interaction.reply(
+    current
+      ? `🎵 Now playing: **${current.info.title}**`
+      : "Nothing is playing right now."
+  );
+}
+
 
     if (commandName === "lyrics") {
       if (!currentPlayer?.queue.current) {
@@ -667,6 +656,7 @@ client.on("interactionCreate", async interaction => {
     }
   }
 });
+
 client.lavalink.on("error", (node, error) => {
   console.error("Lavalink error:", error);
 });
